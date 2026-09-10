@@ -16,7 +16,7 @@ from telegram.ext import (
 # НАСТРОЙКИ
 # =========================
 
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("TOKEN")
 FACEIT_API_KEY = os.getenv("FACEIT_API_KEY")
 
 FACEIT_API = "https://open.faceit.com/data/v4"
