@@ -3,6 +3,8 @@ import os
 import re
 import time
 import requests
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from telegram import Update
 from telegram.ext import (
@@ -801,6 +803,35 @@ async def handle_message(
 # ЗАПУСК
 # =========================
 
+# =========================
+# HTTP-СЕРВЕР ДЛЯ RENDER
+# =========================
+
+class HealthHandler(BaseHTTPRequestHandler):
+
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"FACEIT Stats Bot is running")
+
+    def log_message(self, format, *args):
+        return
+
+
+def start_health_server():
+
+    port = int(os.getenv("PORT", "10000"))
+
+    server = HTTPServer(
+        ("0.0.0.0", port),
+        HealthHandler
+    )
+
+    print(f"HTTP health server started on port {port}")
+
+    server.serve_forever()
+
 def main():
 
     if not TOKEN:
@@ -836,11 +867,18 @@ def main():
         )
     )
 
-    print(
-        "FACEIT Stats Bot started"
-    )
+  print(
+    "FACEIT Stats Bot started"
+)
 
-    app.run_polling()
+health_thread = threading.Thread(
+    target=start_health_server,
+    daemon=True
+)
+
+health_thread.start()
+
+app.run_polling()
 
 
 if __name__ == "__main__":
