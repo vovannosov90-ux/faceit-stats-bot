@@ -306,6 +306,32 @@ def extract_nickname(text):
 
     text = text.strip()
 
+    # Убираем лишние пробелы
+    text = text.replace("\n", "").replace("\r", "")
+
+    # =========================
+    # FACEIT URL
+    # =========================
+
+    match = re.search(
+        r"(?:https?://)?(?:www\.)?faceit\.com/(?:[a-z]{2}/)?players/([^/?#\s]+)",
+        text,
+        re.IGNORECASE
+    )
+
+    if match:
+        return match.group(1)
+
+    # =========================
+    # Если прислали только ник
+    # =========================
+
+    if re.fullmatch(r"[A-Za-z0-9_.-]{2,50}", text):
+        return text
+
+    return None
+    text = text.strip()
+
     # FACEIT URL
     match = re.search(
         r"faceit\.com/(?:en/)?players/([^/?#]+)",
