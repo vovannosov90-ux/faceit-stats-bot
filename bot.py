@@ -39,7 +39,9 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-type", "text/plain")
         self.end_headers()
-        self.wfile.write(b"FACEIT Stats Bot is running")
+        self.wfile.write(
+            b"FACEIT Stats Bot is running"
+        )
 
     def log_message(self, format, *args):
         return
@@ -47,7 +49,9 @@ class HealthHandler(BaseHTTPRequestHandler):
 
 def start_health_server():
 
-    port = int(os.getenv("PORT", "10000"))
+    port = int(
+        os.getenv("PORT", "10000")
+    )
 
     server = HTTPServer(
         ("0.0.0.0", port),
@@ -65,11 +69,18 @@ def start_health_server():
 # FACEIT API
 # =========================
 
-def faceit_get(url, params=None, retries=3):
+def faceit_get(
+    url,
+    params=None,
+    retries=3
+):
 
     headers = {
-        "Authorization": f"Bearer {FACEIT_API_KEY}",
-        "Content-Type": "application/json",
+        "Authorization":
+            f"Bearer {FACEIT_API_KEY}",
+
+        "Content-Type":
+            "application/json",
     }
 
     for attempt in range(retries):
@@ -137,7 +148,7 @@ def get_matches(player_id):
 
 
 # =========================
-# PLAYER MATCH STATS
+# PLAYER STATS
 # =========================
 
 def get_player_match_stats(player_id):
@@ -163,7 +174,7 @@ def get_match_details(match_id):
 
 
 # =========================
-# DEBUG MATCH RATING
+# DEBUG MATCH
 # =========================
 
 def debug_match_rating(matches):
@@ -222,7 +233,7 @@ def debug_match_rating(matches):
 
 
 # =========================
-# ANALYZE PLAYER STATS
+# ANALYZE STATS
 # =========================
 
 def analyze_player_stats(
@@ -247,13 +258,33 @@ def analyze_player_stats(
 
     for item in items:
 
-        # В ответе FACEIT статистика
-        # находится внутри объекта "stats"
+        # ==================================
+        # FACEIT отдаёт:
+        #
+        # item
+        #   └── stats
+        #        └── stats
+        #             ├── Kills
+        #             ├── Deaths
+        #             └── Result
+        #
+        # Поэтому достаём оба уровня.
+        # ==================================
 
         stats = item.get(
             "stats",
             {}
         )
+
+        if (
+            isinstance(stats, dict)
+            and isinstance(
+                stats.get("stats"),
+                dict
+            )
+        ):
+
+            stats = stats["stats"]
 
         if not isinstance(
             stats,
@@ -262,7 +293,7 @@ def analyze_player_stats(
             continue
 
         # =========================
-        # DEBUG ПЕРВОГО МАТЧА
+        # DEBUG
         # =========================
 
         if analyzed == 0:
@@ -296,7 +327,7 @@ def analyze_player_stats(
                 )
             )
 
-        except:
+        except (ValueError, TypeError):
 
             pass
 
@@ -313,7 +344,7 @@ def analyze_player_stats(
                 )
             )
 
-        except:
+        except (ValueError, TypeError):
 
             pass
 
@@ -340,47 +371,36 @@ def analyze_player_stats(
         # RATING
         # =========================
 
-        possible_rating_fields = [
-
+        rating_fields = [
             "Rating",
-
             "rating",
-
             "Player Rating",
-
             "player_rating",
-
             "Player rating",
-
             "Average Rating",
-
             "average_rating"
-
         ]
 
-        rating_value = None
-
-        for field in possible_rating_fields:
+        for field in rating_fields:
 
             if field in stats:
 
                 try:
 
-                    rating_value = float(
-                        stats[field]
+                    ratings.append(
+                        float(
+                            stats[field]
+                        )
                     )
 
                     break
 
-                except:
+                except (
+                    ValueError,
+                    TypeError
+                ):
 
                     pass
-
-        if rating_value is not None:
-
-            ratings.append(
-                rating_value
-            )
 
         analyzed += 1
 
@@ -402,7 +422,7 @@ def analyze_player_stats(
 
 
 # =========================
-# TELEGRAM START
+# /START
 # =========================
 
 async def start(
@@ -435,6 +455,18 @@ async def handle_message(
     nickname = update.message.text.strip()
 
     # =========================
+    # ОЧИСТКА ВВОДА
+    # =========================
+
+    # Если Telegram/копирование случайно
+    # добавило время вроде 03:19
+    nickname = re.sub(
+        r"\s*\d{1,2}:\d{2}\s*$",
+        "",
+        nickname
+    ).strip()
+
+    # =========================
     # FACEIT URL
     # =========================
 
@@ -443,7 +475,7 @@ async def handle_message(
         r"faceit\.com/"
         r"(?:[a-z]{2}/)?"
         r"players/"
-        r"([^/?]+)",
+        r"([^/?\s]+)",
 
         nickname,
 
