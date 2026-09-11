@@ -371,10 +371,6 @@ def get_match_rating(
                 rating,
             )
 
-            # Если detailed_results содержит
-            # membership/player_id,
-            # проверяем соответствие игроку.
-
             player_found = False
 
             membership = result.get(
@@ -393,13 +389,6 @@ def get_match_rating(
 
             if membership == player_id:
                 player_found = True
-
-            # Если player_id внутри результата
-            # отсутствует, но rating есть,
-            # пока всё равно возвращаем rating.
-            #
-            # Это нужно для диагностики
-            # текущей структуры API.
 
             print(
                 "PLAYER MATCH:",
@@ -421,6 +410,7 @@ def get_match_rating(
 
         print()
         print("MATCH TEAMS FOUND:")
+
         print(
             json.dumps(
                 teams,
@@ -513,10 +503,6 @@ def analyze_player_stats(
         "PLAYER STATS:",
         len(player_stats),
     )
-
-    # --------------------------------------------------------
-    # ОГРАНИЧИВАЕМ ДО 100
-    # --------------------------------------------------------
 
     player_stats = player_stats[:limit]
 
@@ -631,13 +617,6 @@ def analyze_player_stats(
     print("MATCHES TO CHECK:", len(matches))
     print("================================================")
 
-    # Берём до 100 последних матчей.
-    # Но для диагностики достаточно сначала
-    # проверить первые 20.
-    #
-    # После того как увидим структуру,
-    # можно будет убрать это ограничение.
-
     matches_to_check = matches[:20]
 
     checked_rating_matches = 0
@@ -652,13 +631,13 @@ def analyze_player_stats(
         )
 
         if not match_id:
-
             continue
 
         print()
         print(
             f"[RATING {index}/{len(matches_to_check)}]"
         )
+
         print(
             "MATCH ID:",
             match_id,
@@ -688,22 +667,22 @@ def analyze_player_stats(
                 ">>> NO RATING"
             )
 
-        # Небольшая пауза,
-        # чтобы не долбить API слишком быстро.
-
         time.sleep(0.15)
 
     print()
     print("================================================")
     print("RATING SEARCH FINISHED")
+
     print(
         "RATINGS FOUND:",
         len(ratings),
     )
+
     print(
         "MATCHES WITH RATING:",
         checked_rating_matches,
     )
+
     print("================================================")
     print()
 
@@ -1253,35 +1232,5 @@ def main():
 # ============================================================
 
 if __name__ == "__main__":
-
     main()
-
-### Что теперь делаем
-
-1. GitHub → `bot.py`.
-2. Удаляешь **весь** старый код.
-3. Вставляешь код выше.
-4. `Commit changes`.
-5. Ждёшь, пока Render задеплоит.
-6. В Telegram нажимаешь **📊 Моя статистика**.
-7. **Ничего больше не нажимай.**
-8. Скидываешь мне логи Render.
-
-Особенно мне нужны строки:
-
-```text
-SEARCHING FACEIT RATING
 ```
-
-и всё, что идёт после:
-
-```text
-RATING CHECK
-MATCH:
-```
-
-Эта версия проверит **20 последних матчей**, чтобы не делать сотню запросов подряд. Если FACEIT действительно отдаёт индивидуальный Rating через `detailed_results`, мы его поймаем. Официальная документация прямо показывает `stats.rating` внутри `detailed_results`.
-
-И да: параметр `?limit=100` я уже добавил в запрос статистики игрока — официальный API разрешает до 100 записей для этого endpoint.
-
-**После этого не надо присылать мне весь лог Render. Просто скопируй кусок от `SEARCHING FACEIT RATING` до `RATING SEARCH FINISHED`.**
