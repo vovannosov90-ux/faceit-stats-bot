@@ -286,7 +286,7 @@ def get_match_details(match_id):
 
 
 # ============================================================
-# GET MATCH RATING
+# SEARCH INDIVIDUAL RATING
 # ============================================================
 
 def get_match_rating(
@@ -310,149 +310,116 @@ def get_match_rating(
     except Exception as e:
 
         print(
-            "RATING: ошибка получения match details:",
+            "RATING ERROR:",
             repr(e),
         )
 
         return None
 
     # --------------------------------------------------------
-    # DETAILED RESULTS
+    # ПОКА НЕ БЕРЁМ teams[].stats.rating
+    #
+    # Это командный / матчевый показатель.
+    # Нельзя считать его личным Rating игрока.
     # --------------------------------------------------------
 
-    detailed_results = match.get(
-        "detailed_results",
-        [],
-    )
-
-    print(
-        "DETAILED RESULTS COUNT:",
-        len(detailed_results),
-    )
-
     # --------------------------------------------------------
-    # ПЕЧАТАЕМ СТРУКТУРУ
+    # ИЩЕМ Rating ВО ВСЕЙ СТРУКТУРЕ ОТВЕТА
     # --------------------------------------------------------
 
-    if detailed_results:
+    found_values = []
 
-        print(
-            "FIRST DETAILED RESULT:"
-        )
+    def recursive_search(
+        obj,
+        path="root",
+    ):
 
-        print(
-            json.dumps(
-                detailed_results[0],
-                ensure_ascii=False,
-                indent=2,
-            )[:15000]
-        )
+        if isinstance(obj, dict):
 
-    # --------------------------------------------------------
-    # ИЩЕМ RATING
-    # --------------------------------------------------------
+            for key, value in obj.items():
 
-    for result in detailed_results:
+                current_path = (
+                    f"{path}.{key}"
+                )
 
-        stats = result.get(
-            "stats",
-            {},
-        )
+                key_lower = str(
+                    key
+                ).lower()
 
-        rating = stats.get(
-            "rating"
-        )
-
-        if rating is not None:
-
-            print(
-                "FOUND RATING:",
-                rating,
-            )
-
-            player_found = False
-
-            membership = result.get(
-                "membership"
-            )
-
-            result_player_id = result.get(
-                "player_id"
-            )
-
-            if (
-                result_player_id
-                and result_player_id == player_id
-            ):
-                player_found = True
-
-            if membership == player_id:
-                player_found = True
-
-            print(
-                "PLAYER MATCH:",
-                player_found,
-            )
-
-            return float(rating)
-
-    # --------------------------------------------------------
-    # ДОПОЛНИТЕЛЬНО ПРОВЕРЯЕМ TEAMS
-    # --------------------------------------------------------
-
-    teams = match.get(
-        "teams",
-        {}
-    )
-
-    if teams:
-
-        print()
-        print("MATCH TEAMS FOUND:")
-
-        print(
-            json.dumps(
-                teams,
-                ensure_ascii=False,
-                indent=2,
-            )[:15000]
-        )
-
-        print()
-
-        if isinstance(
-            teams,
-            dict,
-        ):
-
-            for team_name, team_data in teams.items():
-
-                if not isinstance(
-                    team_data,
-                    dict,
+                if (
+                    key_lower == "rating"
+                    or "rating" in key_lower
                 ):
-                    continue
-
-                team_stats = team_data.get(
-                    "stats",
-                    {},
-                )
-
-                team_rating = team_stats.get(
-                    "rating"
-                )
-
-                if team_rating is not None:
 
                     print(
-                        "TEAM RATING FOUND:",
-                        team_rating,
-                        "TEAM:",
-                        team_name,
+                        "RATING FIELD FOUND:",
+                        current_path,
+                        "=",
+                        value,
                     )
 
+                    found_values.append(
+                        (
+                            current_path,
+                            value,
+                        )
+                    )
+
+                recursive_search(
+                    value,
+                    current_path,
+                )
+
+        elif isinstance(obj, list):
+
+            for index, value in enumerate(obj):
+
+                recursive_search(
+                    value,
+                    f"{path}[{index}]",
+                )
+
+    recursive_search(
+        match
+    )
+
+    print()
     print(
-        "RATING NOT FOUND FOR MATCH"
+        "TOTAL RATING FIELDS FOUND:",
+        len(found_values),
+    )
+
+    # --------------------------------------------------------
+    # ПОКАЗЫВАЕМ ПОЛНЫЙ MATCH DETAILS
+    # --------------------------------------------------------
+
+    print()
+    print(
+        "MATCH DETAILS STRUCTURE:"
+    )
+
+    print(
+        json.dumps(
+            match,
+            ensure_ascii=False,
+            indent=2,
+        )[:30000]
+    )
+
+    print()
+
+    # --------------------------------------------------------
+    # НЕ ВОЗВРАЩАЕМ TEAM RATING
+    # --------------------------------------------------------
+    #
+    # Пока мы не нашли подтверждённое индивидуальное поле.
+    #
+    # Возвращаем None, чтобы бот не показывал неправильный
+    # рейтинг игрока.
+    # --------------------------------------------------------
+
+    print(
+        "INDIVIDUAL PLAYER RATING NOT CONFIRMED"
     )
 
     return None
@@ -607,7 +574,7 @@ def analyze_player_stats(
                 pass
 
     # --------------------------------------------------------
-    # НОВЫЙ RATING
+    # SEARCH FACEIT RATING
     # --------------------------------------------------------
 
     print()
@@ -663,7 +630,7 @@ def analyze_player_stats(
         else:
 
             print(
-                ">>> NO RATING"
+                ">>> NO INDIVIDUAL RATING"
             )
 
         time.sleep(0.15)
