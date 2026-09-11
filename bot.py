@@ -1,9 +1,9 @@
-```python
 import os
 import re
 import time
-import requests
 import threading
+import requests
+
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from telegram import Update
@@ -27,20 +27,72 @@ FACEIT_API = "https://open.faceit.com/data/v4"
 
 MATCH_LIMIT = 100
 
-# Небольшая пауза между запросами,
-# чтобы не упираться в лимиты FACEIT API.
+# Пауза между запросами FACEIT API
 REQUEST_DELAY = 0.35
+
+
+# =========================
+# HTTP-СЕРВЕР ДЛЯ RENDER
+# =========================
+
+class HealthHandler(BaseHTTPRequestHandler):
+
+    def do_GET(self):
+
+        self.send_response(200)
+
+        self.send_header(
+            "Content-type",
+            "text/plain"
+        )
+
+        self.end_headers()
+
+        self.wfile.write(
+            b"FACEIT Stats Bot is running"
+        )
+
+    def log_message(self, format, *args):
+        return
+
+
+def start_health_server():
+
+    port = int(
+        os.getenv(
+            "PORT",
+            "10000"
+        )
+    )
+
+    server = HTTPServer(
+        ("0.0.0.0", port),
+        HealthHandler
+    )
+
+    print(
+        f"HTTP health server started on port {port}"
+    )
+
+    server.serve_forever()
 
 
 # =========================
 # FACEIT API
 # =========================
 
-def faceit_get(url, params=None, retries=3):
+def faceit_get(
+    url,
+    params=None,
+    retries=3
+):
 
     headers = {
-        "Authorization": f"Bearer {FACEIT_API_KEY}",
-        "Content-Type": "application/json",
+        "Authorization":
+            f"Bearer {FACEIT_API_KEY}",
+
+        "Content-Type":
+            "application/json",
     }
 
     for attempt in range(retries):
@@ -52,11 +104,15 @@ def faceit_get(url, params=None, retries=3):
             timeout=30
         )
 
-        # Если FACEIT временно ограничил запросы
+        # FACEIT ограничил количество запросов
         if response.status_code == 429:
 
             if attempt < retries - 1:
-                time.sleep(2 + attempt * 2)
+
+                time.sleep(
+                    2 + attempt * 2
+                )
+
                 continue
 
             response.raise_for_status()
@@ -65,7 +121,9 @@ def faceit_get(url, params=None, retries=3):
 
         return response.json()
 
-    raise RuntimeError("FACEIT API не ответил")
+    raise RuntimeError(
+        "FACEIT API не ответил"
+    )
 
 
 # =========================
@@ -98,11 +156,14 @@ def get_matches(player_id):
         }
     )
 
-    return data.get("items", [])
+    return data.get(
+        "items",
+        []
+    )
 
 
 # =========================
-# СТАТИСТИКА КОНКРЕТНОГО МАТЧА
+# СТАТИСТИКА МАТЧА
 # =========================
 
 def get_match_stats(match_id):
@@ -116,26 +177,53 @@ def get_match_stats(match_id):
 # ПОИСК ИГРОКА В СТАТИСТИКЕ
 # =========================
 
-def find_player_stats(match_data, player_id):
+def find_player_stats(
+    match_data,
+    player_id
+):
 
-    rounds = match_data.get("rounds", [])
+    rounds = match_data.get(
+        "rounds",
+        []
+    )
 
     for round_data in rounds:
 
-        teams = round_data.get("teams", [])
+        teams = round_data.get(
+            "teams",
+            []
+        )
 
         for team in teams:
 
-            players = team.get("players", [])
+            players = team.get(
+                "players",
+                []
+            )
 
             for player in players:
 
-                if player.get("player_id") == player_id:
+                if player.get(
+                    "player_id"
+                ) == player_id:
 
                     return {
-                        "player_stats": player.get("player_stats", {}),
-                        "team_stats": team.get("team_stats", {}),
-                        "team_id": team.get("team_id")
+                        "player_stats":
+                            player.get(
+                                "player_stats",
+                                {}
+                            ),
+
+                        "team_stats":
+                            team.get(
+                                "team_stats",
+                                {}
+                            ),
+
+                        "team_id":
+                            team.get(
+                                "team_id"
+                            )
                     }
 
     return None
@@ -145,7 +233,10 @@ def find_player_stats(match_data, player_id):
 # ЧИСЛОВОЕ ЗНАЧЕНИЕ
 # =========================
 
-def get_number(stats, names):
+def get_number(
+    stats,
+    names
+):
 
     for name in names:
 
@@ -154,14 +245,23 @@ def get_number(stats, names):
             value = stats[name]
 
             try:
+
                 return float(
-                    str(value).replace(",", ".")
+                    str(value).replace(
+                        ",",
+                        "."
+                    )
                 )
 
-            except (ValueError, TypeError):
+            except (
+                ValueError,
+                TypeError
+            ):
+
                 pass
 
-    # На всякий случай ищем без учёта регистра
+    # Поиск без учёта регистра
+
     lower_stats = {
         str(k).lower(): v
         for k, v in stats.items()
@@ -174,11 +274,21 @@ def get_number(stats, names):
         if key in lower_stats:
 
             try:
+
                 return float(
-                    str(lower_stats[key]).replace(",", ".")
+                    str(
+                        lower_stats[key]
+                    ).replace(
+                        ",",
+                        "."
+                    )
                 )
 
-            except (ValueError, TypeError):
+            except (
+                ValueError,
+                TypeError
+            ):
+
                 pass
 
     return None
@@ -188,12 +298,18 @@ def get_number(stats, names):
 # СТРОКА
 # =========================
 
-def get_string(stats, names):
+def get_string(
+    stats,
+    names
+):
 
     for name in names:
 
         if name in stats:
-            return str(stats[name])
+
+            return str(
+                stats[name]
+            )
 
     lower_stats = {
         str(k).lower(): v
@@ -205,13 +321,16 @@ def get_string(stats, names):
         key = name.lower()
 
         if key in lower_stats:
-            return str(lower_stats[key])
+
+            return str(
+                lower_stats[key]
+            )
 
     return None
 
 
 # =========================
-# АНАЛИЗ
+# АНАЛИЗ МАТЧЕЙ
 # =========================
 
 def analyze_matches(
@@ -236,17 +355,32 @@ def analyze_matches(
     analyzed = 0
     errors = 0
 
-    for index, match in enumerate(matches):
+    for index, match in enumerate(
+        matches,
+        start=1
+    ):
 
-        match_id = match.get("match_id")
+        match_id = match.get(
+            "match_id"
+        )
 
         if not match_id:
+
             errors += 1
+
             continue
 
         try:
 
-            match_data = get_match_stats(match_id)
+            print(
+                f"Обрабатываю матч "
+                f"{index}/{len(matches)}: "
+                f"{match_id}"
+            )
+
+            match_data = get_match_stats(
+                match_id
+            )
 
             player_data = find_player_stats(
                 match_data,
@@ -254,15 +388,22 @@ def analyze_matches(
             )
 
             if not player_data:
+
                 errors += 1
-                time.sleep(REQUEST_DELAY)
+
+                time.sleep(
+                    REQUEST_DELAY
+                )
+
                 continue
 
-            stats = player_data["player_stats"]
+            stats = player_data[
+                "player_stats"
+            ]
 
-            # -------------------------
+            # =====================
             # RATING
-            # -------------------------
+            # =====================
 
             rating = get_number(
                 stats,
@@ -277,7 +418,9 @@ def analyze_matches(
 
             if rating is not None:
 
-                ratings.append(rating)
+                ratings.append(
+                    rating
+                )
 
                 if rating >= 1.50:
                     rating_150 += 1
@@ -291,9 +434,9 @@ def analyze_matches(
                 if rating >= 1.80:
                     rating_180 += 1
 
-            # -------------------------
+            # =====================
             # KILLS
-            # -------------------------
+            # =====================
 
             kills = get_number(
                 stats,
@@ -305,11 +448,12 @@ def analyze_matches(
             )
 
             if kills is not None:
+
                 kills_total += kills
 
-            # -------------------------
+            # =====================
             # DEATHS
-            # -------------------------
+            # =====================
 
             deaths = get_number(
                 stats,
@@ -321,11 +465,12 @@ def analyze_matches(
             )
 
             if deaths is not None:
+
                 deaths_total += deaths
 
-            # -------------------------
+            # =====================
             # K/D
-            # -------------------------
+            # =====================
 
             kd = get_number(
                 stats,
@@ -342,14 +487,20 @@ def analyze_matches(
 
                 kds.append(kd)
 
-            elif kills is not None and deaths is not None:
+            elif (
+                kills is not None
+                and deaths is not None
+            ):
 
                 if deaths > 0:
-                    kds.append(kills / deaths)
 
-            # -------------------------
-            # RESULT
-            # -------------------------
+                    kds.append(
+                        kills / deaths
+                    )
+
+            # =====================
+            # РЕЗУЛЬТАТ
+            # =====================
 
             result = get_string(
                 stats,
@@ -363,7 +514,9 @@ def analyze_matches(
 
             if result:
 
-                result_lower = result.lower()
+                result_lower = (
+                    result.lower()
+                )
 
                 if result_lower in [
                     "1",
@@ -371,6 +524,7 @@ def analyze_matches(
                     "won",
                     "winner"
                 ]:
+
                     wins += 1
 
                 elif result_lower in [
@@ -379,6 +533,7 @@ def analyze_matches(
                     "lost",
                     "lose"
                 ]:
+
                     losses += 1
 
             analyzed += 1
@@ -392,26 +547,50 @@ def analyze_matches(
 
             errors += 1
 
-        time.sleep(REQUEST_DELAY)
+        time.sleep(
+            REQUEST_DELAY
+        )
 
     return {
-        "total": len(matches),
-        "analyzed": analyzed,
-        "errors": errors,
 
-        "ratings": ratings,
-        "kds": kds,
+        "total":
+            len(matches),
 
-        "wins": wins,
-        "losses": losses,
+        "analyzed":
+            analyzed,
 
-        "kills": kills_total,
-        "deaths": deaths_total,
+        "errors":
+            errors,
 
-        "rating_150": rating_150,
-        "rating_160": rating_160,
-        "rating_170": rating_170,
-        "rating_180": rating_180,
+        "ratings":
+            ratings,
+
+        "kds":
+            kds,
+
+        "wins":
+            wins,
+
+        "losses":
+            losses,
+
+        "kills":
+            kills_total,
+
+        "deaths":
+            deaths_total,
+
+        "rating_150":
+            rating_150,
+
+        "rating_160":
+            rating_160,
+
+        "rating_170":
+            rating_170,
+
+        "rating_180":
+            rating_180,
     }
 
 
@@ -419,47 +598,57 @@ def analyze_matches(
 # ОТЧЁТ
 # =========================
 
-def make_report(nickname, data):
+def make_report(
+    nickname,
+    data
+):
 
     ratings = data["ratings"]
-    kds = data["kds"]
 
-    # -------------------------
+    # =====================
     # RATING
-    # -------------------------
+    # =====================
 
     if ratings:
 
-        avg_rating = sum(ratings) / len(ratings)
-        best_rating = max(ratings)
+        avg_rating = (
+            sum(ratings)
+            / len(ratings)
+        )
+
+        best_rating = max(
+            ratings
+        )
 
     else:
 
         avg_rating = None
         best_rating = None
 
-    # -------------------------
+    # =====================
     # K/D
-    # -------------------------
+    # =====================
 
     if data["deaths"] > 0:
 
         total_kd = (
-            data["kills"] /
-            data["deaths"]
+            data["kills"]
+            / data["deaths"]
         )
 
     elif data["kills"] > 0:
 
-        total_kd = float(data["kills"])
+        total_kd = float(
+            data["kills"]
+        )
 
     else:
 
         total_kd = None
 
-    # -------------------------
+    # =====================
     # WINRATE
-    # -------------------------
+    # =====================
 
     wins = data["wins"]
     losses = data["losses"]
@@ -469,21 +658,22 @@ def make_report(nickname, data):
     if played > 0:
 
         winrate = (
-            wins /
-            played *
-            100
+            wins
+            / played
+            * 100
         )
 
     else:
 
         winrate = None
 
-    # -------------------------
-    # REPORT
-    # -------------------------
+    # =====================
+    # ОТЧЁТ
+    # =====================
 
     report = (
-        f"🎮 <b>FACEIT Stats — {nickname}</b>\n\n"
+        f"🎮 <b>FACEIT Stats — "
+        f"{nickname}</b>\n\n"
 
         f"📊 Последних матчей: "
         f"<b>{data['total']}</b>\n"
@@ -504,9 +694,9 @@ def make_report(nickname, data):
         f"<b>{data['rating_150']}</b>\n\n"
     )
 
-    # -------------------------
+    # =====================
     # AVG RATING
-    # -------------------------
+    # =====================
 
     if avg_rating is not None:
 
@@ -522,9 +712,9 @@ def make_report(nickname, data):
             "<b>—</b>\n"
         )
 
-    # -------------------------
+    # =====================
     # BEST RATING
-    # -------------------------
+    # =====================
 
     if best_rating is not None:
 
@@ -540,9 +730,9 @@ def make_report(nickname, data):
             "<b>—</b>\n"
         )
 
-    # -------------------------
+    # =====================
     # K/D
-    # -------------------------
+    # =====================
 
     if total_kd is not None:
 
@@ -558,9 +748,9 @@ def make_report(nickname, data):
             "<b>—</b>\n"
         )
 
-    # -------------------------
+    # =====================
     # KILLS / DEATHS
-    # -------------------------
+    # =====================
 
     report += (
         f"🔫 Kills: "
@@ -570,9 +760,9 @@ def make_report(nickname, data):
         f"<b>{int(data['deaths'])}</b>\n\n"
     )
 
-    # -------------------------
+    # =====================
     # WINS / LOSSES
-    # -------------------------
+    # =====================
 
     report += (
         f"🏆 Победы: "
@@ -596,9 +786,9 @@ def make_report(nickname, data):
             "<b>—</b>\n"
         )
 
-    # -------------------------
-    # ERRORS
-    # -------------------------
+    # =====================
+    # ОШИБКИ
+    # =====================
 
     if data["errors"] > 0:
 
@@ -611,19 +801,18 @@ def make_report(nickname, data):
 
 
 # =========================
-# TELEGRAM
+# ПОИСК NICKNAME
 # =========================
 
 def extract_nickname(text):
 
     text = text.strip()
 
-    # Иногда Telegram присылает:
-    # [https://faceit.com/...](https://faceit.com/...)
-    # поэтому сначала ищем URL внутри любого текста.
+    # FACEIT URL
 
     match = re.search(
-        r"(?:https?://)?(?:www\.)?"
+        r"(?:https?://)?"
+        r"(?:www\.)?"
         r"faceit\.com/"
         r"(?:[a-z]{2}/)?"
         r"players/"
@@ -634,9 +823,7 @@ def extract_nickname(text):
 
     if match:
 
-        nickname = match.group(1)
-
-        return nickname
+        return match.group(1)
 
     # Просто ник
 
@@ -650,12 +837,17 @@ def extract_nickname(text):
     return None
 
 
+# =========================
+# /START
+# =========================
+
 async def start(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
 
     await update.message.reply_text(
+
         "🎮 <b>FACEIT Stats</b>\n\n"
 
         "Отправь мне:\n\n"
@@ -666,9 +858,14 @@ async def start(
 
         "Например:\n"
         "<code>TheRasca1</code>",
+
         parse_mode="HTML"
     )
 
+
+# =========================
+# СООБЩЕНИЕ
+# =========================
 
 async def handle_message(
     update: Update,
@@ -677,16 +874,20 @@ async def handle_message(
 
     text = update.message.text.strip()
 
-    nickname = extract_nickname(text)
+    nickname = extract_nickname(
+        text
+    )
 
-    # =========================
+    # =====================
     # НИК НЕ НАЙДЕН
-    # =========================
+    # =====================
 
     if not nickname:
 
         await update.message.reply_text(
-            "❌ Не смог определить FACEIT ник.\n\n"
+
+            "❌ Не смог определить "
+            "FACEIT ник.\n\n"
 
             "Отправь ссылку на профиль "
             "или просто ник."
@@ -696,19 +897,25 @@ async def handle_message(
 
     try:
 
-        # =========================
+        # =====================
         # ПОИСК ИГРОКА
-        # =========================
+        # =====================
 
         await update.message.reply_text(
+
             f"🔎 Ищу игрока "
             f"<b>{nickname}</b>...",
+
             parse_mode="HTML"
         )
 
-        player = get_player(nickname)
+        player = get_player(
+            nickname
+        )
 
-        player_id = player.get("player_id")
+        player_id = player.get(
+            "player_id"
+        )
 
         if not player_id:
 
@@ -723,35 +930,41 @@ async def handle_message(
             nickname
         )
 
-        # =========================
+        # =====================
         # ИСТОРИЯ
-        # =========================
+        # =====================
 
         await update.message.reply_text(
+
             f"✅ Игрок найден: "
             f"<b>{real_nickname}</b>\n\n"
 
             f"📊 Получаю последние "
             f"{MATCH_LIMIT} матчей...",
+
             parse_mode="HTML"
         )
 
-        matches = get_matches(player_id)
+        matches = get_matches(
+            player_id
+        )
 
         if not matches:
 
             await update.message.reply_text(
+
                 "❌ Не удалось получить "
                 "историю матчей."
             )
 
             return
 
-        # =========================
+        # =====================
         # АНАЛИЗ
-        # =========================
+        # =====================
 
         await update.message.reply_text(
+
             f"🎮 Найдено матчей: "
             f"<b>{len(matches)}</b>\n\n"
 
@@ -760,6 +973,7 @@ async def handle_message(
 
             "⏳ Это может занять "
             "около минуты.",
+
             parse_mode="HTML"
         )
 
@@ -768,9 +982,9 @@ async def handle_message(
             matches
         )
 
-        # =========================
+        # =====================
         # ОТЧЁТ
-        # =========================
+        # =====================
 
         report = make_report(
             real_nickname,
@@ -785,16 +999,20 @@ async def handle_message(
     except requests.exceptions.HTTPError as e:
 
         await update.message.reply_text(
+
             "❌ Ошибка FACEIT API:\n"
             f"<code>{e}</code>",
+
             parse_mode="HTML"
         )
 
     except Exception as e:
 
         await update.message.reply_text(
+
             "❌ Ошибка:\n"
             f"<code>{e}</code>",
+
             parse_mode="HTML"
         )
 
@@ -802,35 +1020,6 @@ async def handle_message(
 # =========================
 # ЗАПУСК
 # =========================
-
-# =========================
-# HTTP-СЕРВЕР ДЛЯ RENDER
-# =========================
-
-class HealthHandler(BaseHTTPRequestHandler):
-
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/plain")
-        self.end_headers()
-        self.wfile.write(b"FACEIT Stats Bot is running")
-
-    def log_message(self, format, *args):
-        return
-
-
-def start_health_server():
-
-    port = int(os.getenv("PORT", "10000"))
-
-    server = HTTPServer(
-        ("0.0.0.0", port),
-        HealthHandler
-    )
-
-    print(f"HTTP health server started on port {port}")
-
-    server.serve_forever()
 
 def main():
 
@@ -845,6 +1034,10 @@ def main():
         raise RuntimeError(
             "FACEIT_API_KEY не найден"
         )
+
+    # ---------------------
+    # Telegram
+    # ---------------------
 
     app = (
         Application
@@ -862,26 +1055,38 @@ def main():
 
     app.add_handler(
         MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
+            filters.TEXT
+            & ~filters.COMMAND,
             handle_message
         )
     )
 
-  print(
-    "FACEIT Stats Bot started"
-)
+    print(
+        "FACEIT Stats Bot started"
+    )
 
-health_thread = threading.Thread(
-    target=start_health_server,
-    daemon=True
-)
+    # ---------------------
+    # HTTP для Render
+    # ---------------------
 
-health_thread.start()
+    health_thread = threading.Thread(
+        target=start_health_server,
+        daemon=True
+    )
 
-app.run_polling()
+    health_thread.start()
 
+    # ---------------------
+    # Telegram polling
+    # ---------------------
+
+    app.run_polling()
+
+
+# =========================
+# MAIN
+# =========================
 
 if __name__ == "__main__":
 
     main()
-```
