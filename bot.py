@@ -39,6 +39,7 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-type", "text/plain")
         self.end_headers()
+
         self.wfile.write(
             b"FACEIT Stats Bot is running"
         )
@@ -174,7 +175,18 @@ def get_match_details(match_id):
 
 
 # =========================
-# DEBUG MATCH
+# MATCH STATS
+# =========================
+
+def get_match_stats(match_id):
+
+    return faceit_get(
+        f"{FACEIT_API}/matches/{match_id}/stats"
+    )
+
+
+# =========================
+# DEBUG MATCH DETAILS
 # =========================
 
 def debug_match_rating(matches):
@@ -233,7 +245,61 @@ def debug_match_rating(matches):
 
 
 # =========================
-# ANALYZE STATS
+# DEBUG MATCH STATS
+# =========================
+
+def debug_match_stats(matches):
+
+    if not matches:
+        return
+
+    match_id = matches[0].get(
+        "match_id"
+    )
+
+    if not match_id:
+        return
+
+    try:
+
+        data = get_match_stats(
+            match_id
+        )
+
+        print()
+        print(
+            "========== FACEIT MATCH STATS DEBUG =========="
+        )
+
+        print(
+            "MATCH ID:",
+            match_id
+        )
+
+        print(
+            json.dumps(
+                data,
+                ensure_ascii=False,
+                indent=2
+            )[:30000]
+        )
+
+        print(
+            "=============================================="
+        )
+
+        print()
+
+    except Exception as e:
+
+        print(
+            "MATCH STATS ERROR:",
+            e
+        )
+
+
+# =========================
+# ANALYZE PLAYER STATS
 # =========================
 
 def analyze_player_stats(
@@ -258,18 +324,20 @@ def analyze_player_stats(
 
     for item in items:
 
-        # ==================================
-        # FACEIT отдаёт:
+        # FACEIT может отдавать:
+        #
+        # item
+        #   └── stats
+        #        └── Kills
+        #
+        # либо:
         #
         # item
         #   └── stats
         #        └── stats
-        #             ├── Kills
-        #             ├── Deaths
-        #             └── Result
+        #             └── Kills
         #
-        # Поэтому достаём оба уровня.
-        # ==================================
+        # Поддерживаем оба варианта.
 
         stats = item.get(
             "stats",
@@ -327,7 +395,10 @@ def analyze_player_stats(
                 )
             )
 
-        except (ValueError, TypeError):
+        except (
+            ValueError,
+            TypeError
+        ):
 
             pass
 
@@ -344,7 +415,10 @@ def analyze_player_stats(
                 )
             )
 
-        except (ValueError, TypeError):
+        except (
+            ValueError,
+            TypeError
+        ):
 
             pass
 
@@ -455,11 +529,9 @@ async def handle_message(
     nickname = update.message.text.strip()
 
     # =========================
-    # ОЧИСТКА ВВОДА
+    # УБИРАЕМ СЛУЧАЙНОЕ ВРЕМЯ
     # =========================
 
-    # Если Telegram/копирование случайно
-    # добавило время вроде 03:19
     nickname = re.sub(
         r"\s*\d{1,2}:\d{2}\s*$",
         "",
@@ -555,10 +627,18 @@ async def handle_message(
         return
 
     # =========================
-    # DEBUG MATCH
+    # DEBUG MATCH DETAILS
     # =========================
 
     debug_match_rating(
+        matches
+    )
+
+    # =========================
+    # DEBUG MATCH STATS
+    # =========================
+
+    debug_match_stats(
         matches
     )
 
