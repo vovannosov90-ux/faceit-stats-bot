@@ -2,6 +2,7 @@ import os
 import re
 import time
 import threading
+import json
 import requests
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -29,47 +30,30 @@ MATCH_LIMIT = 100
 
 
 # =========================
-# HTTP-СЕРВЕР ДЛЯ RENDER
+# HTTP HEALTH SERVER
 # =========================
 
 class HealthHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
-
         self.send_response(200)
-
-        self.send_header(
-            "Content-type",
-            "text/plain"
-        )
-
+        self.send_header("Content-type", "text/plain")
         self.end_headers()
-
-        self.wfile.write(
-            b"FACEIT Stats Bot is running"
-        )
+        self.wfile.write(b"FACEIT Stats Bot is running")
 
     def log_message(self, format, *args):
         return
 
 
 def start_health_server():
-
-    port = int(
-        os.getenv(
-            "PORT",
-            "10000"
-        )
-    )
+    port = int(os.getenv("PORT", "10000"))
 
     server = HTTPServer(
         ("0.0.0.0", port),
         HealthHandler
     )
 
-    print(
-        f"HTTP health server started on port {port}"
-    )
+    print(f"HTTP health server started on port {port}")
 
     server.serve_forever()
 
@@ -78,18 +62,11 @@ def start_health_server():
 # FACEIT API
 # =========================
 
-def faceit_get(
-    url,
-    params=None,
-    retries=3
-):
+def faceit_get(url, params=None, retries=3):
 
     headers = {
-        "Authorization":
-            f"Bearer {FACEIT_API_KEY}",
-
-        "Content-Type":
-            "application/json",
+        "Authorization": f"Bearer {FACEIT_API_KEY}",
+        "Content-Type": "application/json",
     }
 
     for attempt in range(retries):
@@ -104,24 +81,18 @@ def faceit_get(
         if response.status_code == 429:
 
             if attempt < retries - 1:
-
-                time.sleep(
-                    2 + attempt * 2
-                )
-
+                time.sleep(2 + attempt * 2)
                 continue
 
         response.raise_for_status()
 
         return response.json()
 
-    raise RuntimeError(
-        "FACEIT API не ответил"
-    )
+    raise RuntimeError("FACEIT API не ответил")
 
 
 # =========================
-# ИГРОК
+# PLAYER
 # =========================
 
 def get_player(nickname):
@@ -136,7 +107,7 @@ def get_player(nickname):
 
 
 # =========================
-# ИСТОРИЯ МАТЧЕЙ
+# MATCH HISTORY
 # =========================
 
 def get_matches(player_id):
@@ -150,14 +121,11 @@ def get_matches(player_id):
         }
     )
 
-    return data.get(
-        "items",
-        []
-    )
+    return data.get("items", [])
 
 
 # =========================
-# СТАТИСТИКА ИГРОКА
+# PLAYER MATCH STATS
 # =========================
 
 def get_player_match_stats(player_id):
@@ -172,520 +140,181 @@ def get_player_match_stats(player_id):
 
 
 # =========================
-# ЧИСЛО
+# MATCH DETAILS
 # =========================
 
-def get_number(
-    stats,
-    names
-):
+def get_match_details(match_id):
 
-    if not isinstance(stats, dict):
-        return None
-
-    # Сначала точное совпадение
-
-    for name in names:
-
-        if name in stats:
-
-            try:
-
-                return float(
-                    str(
-                        stats[name]
-                    ).replace(",", ".")
-                )
-
-            except (
-                ValueError,
-                TypeError
-            ):
-
-                pass
-
-    # Потом без учёта регистра
-
-    lower_stats = {
-        str(k).lower(): v
-        for k, v in stats.items()
-    }
-
-    for name in names:
-
-        key = name.lower()
-
-        if key in lower_stats:
-
-            try:
-
-                return float(
-                    str(
-                        lower_stats[key]
-                    ).replace(",", ".")
-                )
-
-            except (
-                ValueError,
-                TypeError
-            ):
-
-                pass
-
-    return None
-
-
-# =========================
-# СТРОКА
-# =========================
-
-def get_string(
-    stats,
-    names
-):
-
-    if not isinstance(stats, dict):
-        return None
-
-    for name in names:
-
-        if name in stats:
-
-            return str(
-                stats[name]
-            )
-
-    lower_stats = {
-        str(k).lower(): v
-        for k, v in stats.items()
-    }
-
-    for name in names:
-
-        key = name.lower()
-
-        if key in lower_stats:
-
-            return str(
-                lower_stats[key]
-            )
-
-    return None
-
-
-# =========================
-# АНАЛИЗ СТАТИСТИКИ
-# =========================
-
-def analyze_player_stats(
-    stats_data
-):
-
-    items = stats_data.get(
-        "items",
-        []
+    return faceit_get(
+        f"{FACEIT_API}/matches/{match_id}"
     )
+
+
+# =========================
+# ANALYZE STATS
+# =========================
+
+def analyze_player_stats(stats_data, player_id):
 
     ratings = []
 
-    kills_total = 0
-    deaths_total = 0
+    total_kills = 0
+    total_deaths = 0
 
     wins = 0
     losses = 0
 
     analyzed = 0
-    errors = 0
 
-    for item in items:
+    items = stats_data.get("items", [])
 
-        stats = item.get(
-            "stats",
-            {}
-        )
+    for stats in items:
 
-        if not isinstance(
-            stats,
-            dict
-        ):
-
-            errors += 1
-
-            continue
-
-        # =====================
-        # DEBUG
-        # =====================
-
+        # DEBUG — смотрим структуру первого матча
         if analyzed == 0:
 
-            print(
-                "FACEIT PLAYER STATS:"
-            )
+            print("========== FACEIT PLAYER STATS ==========")
 
             print(
-                stats
+                json.dumps(
+                    stats,
+                    ensure_ascii=False,
+                    indent=2
+                )
             )
 
-        # =====================
-        # RATING
-        # =====================
+            print("=========================================")
 
-        rating = get_number(
-            stats,
-            [
-                "Rating",
-                "rating",
-                "Player Rating",
-                "player_rating",
-                "Player rating",
-                "Average Rating",
-                "average_rating"
-            ]
-        )
-
-        if rating is not None:
-
-            ratings.append(
-                rating
-            )
-
-        # =====================
+        # =========================
         # KILLS
-        # =====================
+        # =========================
 
-        kills = get_number(
-            stats,
-            [
-                "Kills",
-                "kills",
-                "Kill",
-                "kill"
-            ]
-        )
-
-        if kills is not None:
-
-            kills_total += kills
-
-        # =====================
-        # DEATHS
-        # =====================
-
-        deaths = get_number(
-            stats,
-            [
-                "Deaths",
-                "deaths",
-                "Death",
-                "death"
-            ]
-        )
-
-        if deaths is not None:
-
-            deaths_total += deaths
-
-        # =====================
-        # RESULT
-        # =====================
-
-        result = get_string(
-            stats,
-            [
-                "Result",
-                "result",
-                "Match Result",
-                "match_result",
-                "Winner",
-                "winner"
-            ]
-        )
-
-        if result:
-
-            result_lower = (
-                result.lower()
+        try:
+            total_kills += int(
+                stats.get("Kills", 0)
             )
+        except:
+            pass
 
-            if result_lower in [
-                "1",
-                "win",
-                "won",
-                "winner"
-            ]:
+        # =========================
+        # DEATHS
+        # =========================
 
-                wins += 1
+        try:
+            total_deaths += int(
+                stats.get("Deaths", 0)
+            )
+        except:
+            pass
 
-            elif result_lower in [
-                "0",
-                "loss",
-                "lost",
-                "lose"
-            ]:
+        # =========================
+        # RESULT
+        # =========================
 
-                losses += 1
+        result = str(
+            stats.get("Result", "")
+        )
+
+        if result == "1":
+            wins += 1
+
+        elif result == "0":
+            losses += 1
+
+        # =========================
+        # RATING
+        # =========================
+
+        possible_rating_fields = [
+            "Rating",
+            "rating",
+            "Player Rating",
+            "player_rating",
+            "Player rating",
+            "Average Rating",
+            "average_rating"
+        ]
+
+        rating_value = None
+
+        for field in possible_rating_fields:
+
+            if field in stats:
+
+                try:
+                    rating_value = float(
+                        stats[field]
+                    )
+                    break
+
+                except:
+                    pass
+
+        if rating_value is not None:
+            ratings.append(rating_value)
 
         analyzed += 1
 
     return {
-
-        "total":
-            len(items),
-
-        "analyzed":
-            analyzed,
-
-        "errors":
-            errors,
-
-        "ratings":
-            ratings,
-
-        "kills":
-            kills_total,
-
-        "deaths":
-            deaths_total,
-
-        "wins":
-            wins,
-
-        "losses":
-            losses
+        "ratings": ratings,
+        "kills": total_kills,
+        "deaths": total_deaths,
+        "wins": wins,
+        "losses": losses,
+        "analyzed": analyzed
     }
 
 
 # =========================
-# ОТЧЁТ
+# DEBUG NEW FACEIT RATING
 # =========================
 
-def make_report(
-    nickname,
-    data
-):
+def debug_match_rating(matches):
 
-    ratings = data["ratings"]
+    if not matches:
+        return
 
-    if ratings:
+    test_match_id = matches[0].get("match_id")
 
-        avg_rating = (
-            sum(ratings)
-            / len(ratings)
+    if not test_match_id:
+        return
+
+    try:
+
+        test_match = get_match_details(
+            test_match_id
         )
 
-        best_rating = max(
-            ratings
+        print()
+        print("========== FACEIT MATCH DEBUG ==========")
+        print("MATCH ID:", test_match_id)
+
+        detailed_results = test_match.get(
+            "detailed_results",
+            []
         )
 
-        rating_150 = sum(
-            r >= 1.50
-            for r in ratings
+        print(
+            json.dumps(
+                detailed_results,
+                ensure_ascii=False,
+                indent=2
+            )[:15000]
         )
 
-        rating_160 = sum(
-            r >= 1.60
-            for r in ratings
+        print("========================================")
+        print()
+
+    except Exception as e:
+
+        print(
+            "Ошибка получения match details:",
+            e
         )
-
-        rating_170 = sum(
-            r >= 1.70
-            for r in ratings
-        )
-
-        rating_180 = sum(
-            r >= 1.80
-            for r in ratings
-        )
-
-    else:
-
-        avg_rating = None
-        best_rating = None
-
-        rating_150 = 0
-        rating_160 = 0
-        rating_170 = 0
-        rating_180 = 0
-
-    # =====================
-    # K/D
-    # =====================
-
-    if data["deaths"] > 0:
-
-        kd = (
-            data["kills"]
-            / data["deaths"]
-        )
-
-    else:
-
-        kd = None
-
-    # =====================
-    # WINRATE
-    # =====================
-
-    wins = data["wins"]
-    losses = data["losses"]
-
-    played = wins + losses
-
-    if played > 0:
-
-        winrate = (
-            wins
-            / played
-            * 100
-        )
-
-    else:
-
-        winrate = None
-
-    # =====================
-    # ОТЧЁТ
-    # =====================
-
-    report = (
-        f"🎮 <b>FACEIT Stats — "
-        f"{nickname}</b>\n\n"
-
-        f"📊 Последних матчей: "
-        f"<b>{data['total']}</b>\n"
-
-        f"🔎 Обработано матчей: "
-        f"<b>{data['analyzed']}</b>\n\n"
-
-        f"🔥 Rating ≥ 1.80: "
-        f"<b>{rating_180}</b>\n"
-
-        f"⚡ Rating ≥ 1.70: "
-        f"<b>{rating_170}</b>\n"
-
-        f"📈 Rating ≥ 1.60: "
-        f"<b>{rating_160}</b>\n"
-
-        f"📊 Rating ≥ 1.50: "
-        f"<b>{rating_150}</b>\n\n"
-    )
-
-    if avg_rating is not None:
-
-        report += (
-            f"📈 Средний Rating: "
-            f"<b>{avg_rating:.2f}</b>\n"
-        )
-
-    else:
-
-        report += (
-            "📈 Средний Rating: "
-            "<b>—</b>\n"
-        )
-
-    if best_rating is not None:
-
-        report += (
-            f"🚀 Лучший Rating: "
-            f"<b>{best_rating:.2f}</b>\n"
-        )
-
-    else:
-
-        report += (
-            "🚀 Лучший Rating: "
-            "<b>—</b>\n"
-        )
-
-    if kd is not None:
-
-        report += (
-            f"🎯 K/D: "
-            f"<b>{kd:.2f}</b>\n"
-        )
-
-    else:
-
-        report += (
-            "🎯 K/D: "
-            "<b>—</b>\n"
-        )
-
-    report += (
-        f"🔫 Kills: "
-        f"<b>{int(data['kills'])}</b>\n"
-
-        f"💀 Deaths: "
-        f"<b>{int(data['deaths'])}</b>\n\n"
-
-        f"🏆 Победы: "
-        f"<b>{wins}</b>\n"
-
-        f"💀 Поражения: "
-        f"<b>{losses}</b>\n"
-    )
-
-    if winrate is not None:
-
-        report += (
-            f"📌 Winrate: "
-            f"<b>{winrate:.1f}%</b>\n"
-        )
-
-    else:
-
-        report += (
-            "📌 Winrate: "
-            "<b>—</b>\n"
-        )
-
-    if data["errors"] > 0:
-
-        report += (
-            f"\n⚠️ Ошибок: "
-            f"<b>{data['errors']}</b>"
-        )
-
-    return report
 
 
 # =========================
-# ПОИСК NICKNAME
-# =========================
-
-def extract_nickname(text):
-
-    text = text.strip()
-
-    match = re.search(
-        r"(?:https?://)?"
-        r"(?:www\.)?"
-        r"faceit\.com/"
-        r"(?:[a-z]{2}/)?"
-        r"players/"
-        r"([^/?#\s\)\]]+)",
-        text,
-        re.IGNORECASE
-    )
-
-    if match:
-
-        return match.group(1)
-
-    if re.fullmatch(
-        r"[A-Za-z0-9_.-]{2,50}",
-        text
-    ):
-
-        return text
-
-    return None
-
-
-# =========================
-# START
+# TELEGRAM /START
 # =========================
 
 async def start(
@@ -694,24 +323,15 @@ async def start(
 ):
 
     await update.message.reply_text(
-
-        "🎮 <b>FACEIT Stats</b>\n\n"
-
-        "Отправь мне:\n\n"
-
-        "• ссылку на FACEIT профиль\n"
-        "или\n"
-        "• просто FACEIT ник\n\n"
-
+        "🎮 FACEIT Stats Bot\n\n"
+        "Отправь FACEIT ник или ссылку на профиль.\n\n"
         "Например:\n"
-        "<code>TheRasca1</code>",
-
-        parse_mode="HTML"
+        "TheRasca1"
     )
 
 
 # =========================
-# СООБЩЕНИЕ
+# HANDLE MESSAGE
 # =========================
 
 async def handle_message(
@@ -719,109 +339,238 @@ async def handle_message(
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    text = update.message.text.strip()
+    nickname = update.message.text.strip()
 
-    nickname = extract_nickname(
-        text
+    # =========================
+    # FACEIT URL
+    # =========================
+
+    match = re.search(
+        r"faceit\.com/(?:[a-z]{2}/)?players/([^/?]+)",
+        nickname,
+        re.IGNORECASE
     )
 
-    if not nickname:
+    if match:
+        nickname = match.group(1)
+
+    # =========================
+    # ЗАГРУЗКА PLAYER
+    # =========================
+
+    try:
+
+        player = get_player(nickname)
+
+    except Exception as e:
 
         await update.message.reply_text(
+            "❌ Не удалось найти игрока FACEIT.\n\n"
+            "Проверь ник или ссылку."
+        )
 
-            "❌ Не смог определить "
-            "FACEIT ник."
+        print("PLAYER ERROR:", e)
+
+        return
+
+    player_id = player.get("player_id")
+
+    real_nickname = player.get(
+        "nickname",
+        nickname
+    )
+
+    if not player_id:
+
+        await update.message.reply_text(
+            "❌ Не удалось получить ID игрока."
         )
 
         return
 
+    # =========================
+    # MATCH HISTORY
+    # =========================
+
     try:
 
-        await update.message.reply_text(
-
-            f"🔎 Ищу игрока "
-            f"<b>{nickname}</b>...",
-
-            parse_mode="HTML"
-        )
-
-        player = get_player(
-            nickname
-        )
-
-        player_id = player.get(
-            "player_id"
-        )
-
-        if not player_id:
-
-            await update.message.reply_text(
-                "❌ Игрок не найден."
-            )
-
-            return
-
-        real_nickname = player.get(
-            "nickname",
-            nickname
-        )
-
-        await update.message.reply_text(
-
-            f"✅ Игрок найден: "
-            f"<b>{real_nickname}</b>\n\n"
-
-            f"📊 Получаю последние "
-            f"{MATCH_LIMIT} матчей...",
-
-            parse_mode="HTML"
-        )
-
-        stats_data = get_player_match_stats(
+        matches = get_matches(
             player_id
-        )
-
-        await update.message.reply_text(
-
-            "🔍 Получаю статистику FACEIT...\n\n"
-            "⏳ Подожди несколько секунд.",
-
-            parse_mode="HTML"
-        )
-
-        data = analyze_player_stats(
-            stats_data
-        )
-
-        report = make_report(
-            real_nickname,
-            data
-        )
-
-        await update.message.reply_text(
-            report,
-            parse_mode="HTML"
-        )
-
-    except requests.exceptions.HTTPError as e:
-
-        await update.message.reply_text(
-
-            "❌ Ошибка FACEIT API:\n"
-            f"<code>{e}</code>",
-
-            parse_mode="HTML"
         )
 
     except Exception as e:
 
         await update.message.reply_text(
-
-            "❌ Ошибка:\n"
-            f"<code>{e}</code>",
-
-            parse_mode="HTML"
+            "❌ Ошибка получения матчей FACEIT."
         )
+
+        print("MATCH HISTORY ERROR:", e)
+
+        return
+
+    # =========================
+    # DEBUG MATCH DETAILS
+    # =========================
+
+    debug_match_rating(matches)
+
+    # =========================
+    # PLAYER STATS
+    # =========================
+
+    try:
+
+        stats_data = get_player_match_stats(
+            player_id
+        )
+
+    except Exception as e:
+
+        await update.message.reply_text(
+            "❌ Ошибка получения статистики FACEIT."
+        )
+
+        print("PLAYER STATS ERROR:", e)
+
+        return
+
+    # =========================
+    # ANALYZE
+    # =========================
+
+    result = analyze_player_stats(
+        stats_data,
+        player_id
+    )
+
+    ratings = result["ratings"]
+
+    kills = result["kills"]
+    deaths = result["deaths"]
+
+    wins = result["wins"]
+    losses = result["losses"]
+
+    analyzed = result["analyzed"]
+
+    # =========================
+    # RATING
+    # =========================
+
+    if ratings:
+
+        average_rating = (
+            sum(ratings) / len(ratings)
+        )
+
+        best_rating = max(ratings)
+
+        rating_180 = sum(
+            1 for r in ratings
+            if r >= 1.80
+        )
+
+        rating_170 = sum(
+            1 for r in ratings
+            if r >= 1.70
+        )
+
+        rating_160 = sum(
+            1 for r in ratings
+            if r >= 1.60
+        )
+
+        rating_150 = sum(
+            1 for r in ratings
+            if r >= 1.50
+        )
+
+    else:
+
+        average_rating = None
+        best_rating = None
+
+        rating_180 = 0
+        rating_170 = 0
+        rating_160 = 0
+        rating_150 = 0
+
+    # =========================
+    # K/D
+    # =========================
+
+    if deaths > 0:
+
+        kd = kills / deaths
+
+    else:
+
+        kd = 0
+
+    # =========================
+    # WINRATE
+    # =========================
+
+    total_games = wins + losses
+
+    if total_games > 0:
+
+        winrate = (
+            wins / total_games
+        ) * 100
+
+    else:
+
+        winrate = 0
+
+    # =========================
+    # FORMAT RATING
+    # =========================
+
+    if average_rating is not None:
+
+        average_rating_text = (
+            f"{average_rating:.2f}"
+        )
+
+        best_rating_text = (
+            f"{best_rating:.2f}"
+        )
+
+    else:
+
+        average_rating_text = "—"
+        best_rating_text = "—"
+
+    # =========================
+    # RESPONSE
+    # =========================
+
+    text = (
+        f"🎮 FACEIT Stats — {real_nickname}\n\n"
+
+        f"📊 Последних матчей: {len(matches)}\n"
+        f"🔎 Обработано матчей: {analyzed}\n\n"
+
+        f"🔥 Rating ≥ 1.80: {rating_180}\n"
+        f"⚡ Rating ≥ 1.70: {rating_170}\n"
+        f"📈 Rating ≥ 1.60: {rating_160}\n"
+        f"📊 Rating ≥ 1.50: {rating_150}\n\n"
+
+        f"📈 Средний Rating: {average_rating_text}\n"
+        f"🚀 Лучший Rating: {best_rating_text}\n"
+        f"🎯 K/D: {kd:.2f}\n"
+        f"🔫 Kills: {kills}\n"
+        f"💀 Deaths: {deaths}\n\n"
+
+        f"🏆 Победы: {wins}\n"
+        f"💀 Поражения: {losses}\n"
+        f"📌 Winrate: {winrate:.1f}%"
+    )
+
+    await update.message.reply_text(
+        text
+    )
 
 
 # =========================
@@ -831,13 +580,11 @@ async def handle_message(
 def main():
 
     if not TOKEN:
-
         raise RuntimeError(
             "TOKEN не найден"
         )
 
     if not FACEIT_API_KEY:
-
         raise RuntimeError(
             "FACEIT_API_KEY не найден"
         )
@@ -858,15 +605,16 @@ def main():
 
     app.add_handler(
         MessageHandler(
-            filters.TEXT
-            & ~filters.COMMAND,
+            filters.TEXT & ~filters.COMMAND,
             handle_message
         )
     )
 
-    print(
-        "FACEIT Stats Bot started"
-    )
+    print("FACEIT Stats Bot started")
+
+    # =========================
+    # RENDER HEALTH SERVER
+    # =========================
 
     health_thread = threading.Thread(
         target=start_health_server,
@@ -875,13 +623,12 @@ def main():
 
     health_thread.start()
 
+    # =========================
+    # TELEGRAM
+    # =========================
+
     app.run_polling()
 
 
-# =========================
-# ЗАПУСК
-# =========================
-
 if __name__ == "__main__":
-
     main()
